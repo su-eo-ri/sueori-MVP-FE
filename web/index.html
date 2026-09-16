@@ -31,6 +31,11 @@
 
   <title>sueori</title>
   <link rel="manifest" href="manifest.json">
+
+  <!-- MediaPipe HandLandmarker JS interop 브릿지. Flutter 위젯이 로드되기 전에
+       카메라/모델 로직이 준비되도록 module script로 먼저 로드한다
+       (poc/hand_landmark_poc에서 검증된 로드 순서). -->
+  <script type="module" src="js/mediapipe_bridge.js"></script>
 </head>
 <body>
   <!--
