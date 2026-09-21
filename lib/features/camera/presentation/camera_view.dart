@@ -42,8 +42,36 @@ void registerCameraView() {
       ..style.height = '360px'
       ..style.transform = 'scaleX(-1)';
 
+    // 수어 동작 영역 가이드 — 상하: 정수리~배꼽(허리선), 좌우: 어깨너비+α.
+    // 실제 체형/거리를 측정해서 그리는 게 아니라(손 랜드마크만 있고 어깨/머리
+    // 랜드마크는 없음) 프레임 대비 고정 비율로 보여주는 시각적 가이드 —
+    // 사용자가 이 박스 안에서 동작하도록 유도해서 녹화 데이터 프레이밍을
+    // 일관되게 맞추는 목적.
+    final guideLabel = web.HTMLDivElement()
+      ..style.position = 'absolute'
+      ..style.left = '0'
+      ..style.top = '-18px'
+      ..style.color = '#00e676'
+      ..style.fontSize = '11px'
+      ..style.fontFamily = 'sans-serif'
+      ..style.whiteSpace = 'nowrap'
+      ..textContent = '동작 영역 (정수리~배꼽, 어깨너비+α)';
+
+    final guideOverlay = web.HTMLDivElement()
+      ..style.position = 'absolute'
+      ..style.left = '20%'
+      ..style.top = '5%'
+      ..style.width = '60%'
+      ..style.height = '67%'
+      ..style.boxSizing = 'border-box'
+      ..style.border = '2px dashed #00e676'
+      ..style.borderRadius = '4px'
+      ..style.pointerEvents = 'none';
+    guideOverlay.append(guideLabel);
+
     container.append(video);
     container.append(canvas);
+    container.append(guideOverlay);
     return container;
   });
 }

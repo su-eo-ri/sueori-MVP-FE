@@ -3,7 +3,9 @@
 // poc/hand_landmark_poc/web/js/mediapipe_bridge.js를 기반으로 하되, 그 PoC는
 // 의도적으로 "성능 통계만 노출"하는 범위였다(랜드마크 좌표 자체는 Dart로 안 넘김).
 // 이 파일은 실제 채점에 쓸 수 있도록 getLandmarks()를 추가해서 현재 프레임의
-// 21개 손 랜드마크 좌표(x,y,z, 정규화됨)를 Dart에 노출한다.
+// 손 랜드마크 좌표(x,y,z, 정규화됨)를 Dart에 노출한다. numHands=2라 최대 2개
+// 손까지 handedness와 함께 반환한다 — 두 손을 쓰는 수어(예: "동생")를 한 손만
+// 추적해서 생기던 불안정한 궤적 문제 대응(2026-09-19).
 
 import {
   HandLandmarker,
@@ -28,8 +30,9 @@ const state = {
   running: false,
 };
 
-// 가장 최근 프레임의 랜드마크(손 하나, 21개 {x,y,z}) — getStats()에는 안 넣고
-// 별도 getLandmarks()로만 노출한다(폴링 페이로드를 가볍게 유지하기 위해).
+// 가장 최근 프레임의 랜드마크 — 손마다 {handedness, landmarks: 21개 {x,y,z}}.
+// numHands=2라 최대 2개 손까지 들어올 수 있음. getStats()에는 안 넣고 별도
+// getLandmarks()로만 노출한다(폴링 페이로드를 가볍게 유지하기 위해).
 let lastLandmarks = null;
 
 let handLandmarker = null;
@@ -46,7 +49,7 @@ async function createLandmarker(delegate) {
   return HandLandmarker.createFromOptions(vision, {
     baseOptions: { modelAssetPath: MODEL_URL, delegate },
     runningMode: "VIDEO",
-    numHands: 1,
+    numHands: 2,
   });
 }
 
@@ -119,11 +122,14 @@ function loop() {
       inferenceTimes.reduce((a, b) => a + b, 0) / inferenceTimes.length;
     state.numHands = result.landmarks.length;
 
-    // scoring_poc의 Point3(x,y,z) 형식과 맞춤 — 손이 안 보이면 null로 비워서
-    // Dart 쪽에서 "지금은 캡처 불가"임을 알 수 있게 한다.
+    // 손이 안 보이면 null로 비워서 Dart 쪽에서 "지금은 캡처 불가"임을 알 수
+    // 있게 한다. 손이 보이면 감지된 손마다(최대 2개) handedness + 21개 점.
     lastLandmarks =
       result.landmarks.length > 0
-        ? result.landmarks[0].map((p) => ({ x: p.x, y: p.y, z: p.z }))
+        ? result.landmarks.map((landmarks, i) => ({
+            handedness: result.handedness[i]?.[0]?.categoryName ?? null,
+            landmarks: landmarks.map((p) => ({ x: p.x, y: p.y, z: p.z })),
+          }))
         : null;
 
     drawResults(result);
@@ -181,7 +187,8 @@ function getStats() {
   return JSON.stringify(state);
 }
 
-// 채점용 — 현재 프레임의 21개 랜드마크(손 미검출 시 null)를 JSON으로 반환.
+// 채점용 — 현재 프레임에서 감지된 손마다(최대 2개) {handedness, landmarks}
+// 배열을 JSON으로 반환한다(손 미검출 시 null).
 function getLandmarks() {
   return JSON.stringify(lastLandmarks);
 }
