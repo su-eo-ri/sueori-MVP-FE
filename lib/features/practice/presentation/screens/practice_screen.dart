@@ -7,6 +7,7 @@ import 'package:scoring_poc/scoring_poc.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/widgets/breakpoints.dart';
 import '../../../camera/data/hand_landmark_bridge.dart';
 import '../../../camera/presentation/camera_view.dart';
 import '../../../reference_landmarks/presentation/providers/reference_landmark_providers.dart';
@@ -139,9 +140,105 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
         title: const Text('연습하기'),
         leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: _goBack),
       ),
-      body: Center(
-        child: Padding(padding: const EdgeInsets.all(24), child: _buildBody(ghostLandmarks)),
+      body: Breakpoints.isWide(context)
+          ? _buildWideBody(ghostLandmarks)
+          : Center(
+              child: Padding(padding: const EdgeInsets.all(24), child: _buildBody(ghostLandmarks)),
+            ),
+    );
+  }
+
+  /// 와이드(≥768) 전용: 좌측 카메라 뷰(모바일과 동일 크기) + 우측 안내 패널
+  /// `Row`. 카메라 상태머신은 그대로, 6개 상태 전부 같은 레이아웃 구조를
+  /// 쓰고 안내 텍스트만 바뀐다. `AppShell`은 이 화면(카메라 몰입) 대상이
+  /// 아니므로 여기서 쓰지 않음 — 자체 `AppBar`만 유지.
+  Widget _buildWideBody(List<Point3>? ghostLandmarks) {
+    final (Widget visual, Widget panel) = switch (_state) {
+      _PracticeUiState.permissionPrompt => (
+        _visualPlaceholder(Icons.videocam_outlined, AppColors.brandPrimary),
+        _GuidancePanel(
+          title: '카메라를 사용해요',
+          body: '손 동작을 인식해서 수어 연습을 도와드려요.\n카메라 화면은 저장되지 않고 실시간으로만 사용돼요.',
+          actions: [_primaryButton('카메라 허용하기', _requestCamera)],
+        ),
       ),
+      _PracticeUiState.active => (
+        _cameraPreviewBox(ghostLandmarks: ghostLandmarks),
+        const _GuidancePanel(title: '카메라 인식 중이에요', body: '카메라를 향해 동작을 취해보세요.'),
+      ),
+      _PracticeUiState.noHandDetected => (
+        _cameraPreviewBox(
+          ghostLandmarks: ghostLandmarks,
+          overlay: const Icon(Icons.warning_amber_rounded, color: AppColors.stateWarning, size: 48),
+        ),
+        const _GuidancePanel(title: '손이 잘 안 보여요', body: '밝은 곳에서 카메라 앞에 손을 비춰주세요.'),
+      ),
+      _PracticeUiState.permissionDenied => (
+        _visualPlaceholder(Icons.block, AppColors.stateError),
+        _GuidancePanel(
+          title: '카메라 권한이 거부됐어요',
+          body: '학습은 계속 가능해요.\n브라우저 설정에서 카메라 권한을 허용하면 다시 연습할 수 있어요.',
+          actions: [_backToDeckButton()],
+        ),
+      ),
+      _PracticeUiState.noCamera => (
+        _visualPlaceholder(Icons.videocam_off_outlined, AppColors.stateError),
+        _GuidancePanel(
+          title: '카메라를 사용할 수 없어요',
+          body: '이 기기 또는 브라우저에서는 카메라를 지원하지 않아요.\n학습은 계속 가능해요.',
+          actions: [_backToDeckButton()],
+        ),
+      ),
+      _PracticeUiState.recognitionFailed => (
+        _visualPlaceholder(Icons.error_outline, AppColors.stateError),
+        _GuidancePanel(
+          title: '카메라 인식에 실패했어요',
+          body: '잠시 후 다시 시도해주세요.',
+          actions: [_primaryButton('다시 시도', _requestCamera)],
+        ),
+      ),
+    };
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: Breakpoints.contentMaxWidth),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [visual, const SizedBox(width: 48), Expanded(child: panel)],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 카메라 프리뷰가 없는 4개 상태(권한요청/거부/카메라없음/인식실패)에서
+  /// 와이드 레이아웃의 좌측 슬롯을 [_cameraPreviewBox]와 같은 크기로 채우는
+  /// 아이콘 플레이스홀더.
+  Widget _visualPlaceholder(IconData icon, Color color) {
+    return Container(
+      width: 480,
+      height: 360,
+      decoration: BoxDecoration(
+        color: AppColors.bgSecondary,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.borderDefault),
+      ),
+      child: Center(child: Icon(icon, size: 48, color: color)),
+    );
+  }
+
+  Widget _primaryButton(String label, VoidCallback onPressed) {
+    return FilledButton(
+      style: FilledButton.styleFrom(
+        backgroundColor: AppColors.brandPrimary,
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      onPressed: onPressed,
+      child: Text(label),
     );
   }
 
@@ -266,6 +363,41 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
           ],
         );
       },
+    );
+  }
+}
+
+/// 와이드 레이아웃 우측 안내 패널 — 6개 상태가 공유하는 카드형 레이아웃.
+/// 상태별로 [title]/[body]/[actions] 내용만 다르다.
+class _GuidancePanel extends StatelessWidget {
+  const _GuidancePanel({required this.title, required this.body, this.actions = const []});
+
+  final String title;
+  final String body;
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceCard,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: const [BoxShadow(color: AppColors.cardShadow, blurRadius: 24, offset: Offset(0, 8))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(title, style: AppTextStyles.h1(context)),
+          const SizedBox(height: 12),
+          Text(body, style: AppTextStyles.bodyLarge(context)),
+          if (actions.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            for (final action in actions) ...[action, const SizedBox(height: 8)],
+          ],
+        ],
+      ),
     );
   }
 }

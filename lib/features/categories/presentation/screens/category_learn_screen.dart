@@ -4,12 +4,16 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
-import '../../../../core/widgets/app_bottom_nav.dart';
+import '../../../../core/widgets/app_shell.dart';
+import '../../../../core/widgets/breakpoints.dart';
+import '../../../../core/widgets/hover_lift.dart';
 import '../../domain/category.dart';
 import '../../domain/word.dart';
 import '../providers/category_providers.dart';
 
 /// PRD §5.2 학습 콘텐츠 — 플래시카드/암기장 (`/learn/:category`).
+/// 웹 리디자인(2026-09-21, [[수어리 - 웹 리디자인 방향]]) 반영: `AppBar` 대신 `AppShell`,
+/// 와이드에서는 카드 우측에 전체 단어 목록 패널을 추가.
 class CategoryLearnScreen extends ConsumerStatefulWidget {
   const CategoryLearnScreen({required this.categorySlug, super.key});
 
@@ -35,17 +39,11 @@ class _CategoryLearnScreenState extends ConsumerState<CategoryLearnScreen> {
 
     return categoriesAsync.when(
       loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (error, _) => Scaffold(
-        appBar: AppBar(title: const Text('학습')),
-        body: Center(child: Text('카테고리를 불러오지 못했어요: $error')),
-      ),
+      error: (error, _) => Scaffold(body: Center(child: Text('카테고리를 불러오지 못했어요: $error'))),
       data: (categories) {
         final matches = categories.where((c) => c.slug == widget.categorySlug);
         if (matches.isEmpty) {
-          return Scaffold(
-            appBar: AppBar(title: const Text('학습')),
-            body: const Center(child: Text('존재하지 않는 카테고리예요.')),
-          );
+          return const Scaffold(body: Center(child: Text('존재하지 않는 카테고리예요.')));
         }
         return _buildDeck(matches.first);
       },
@@ -55,67 +53,157 @@ class _CategoryLearnScreenState extends ConsumerState<CategoryLearnScreen> {
   Widget _buildDeck(Category category) {
     final wordsAsync = ref.watch(wordsByCategoryProvider(category.id));
 
-    return Scaffold(
-      appBar: AppBar(title: Text(category.name)),
-      bottomNavigationBar: const AppBottomNav(currentIndex: 1),
-      body: wordsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(child: Text('단어를 불러오지 못했어요: $error')),
-        data: (words) {
-          if (words.isEmpty) {
-            return const Center(child: Text('이 카테고리엔 아직 단어가 없어요.'));
-          }
-          return Column(
+    return wordsAsync.when(
+      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
+      error: (error, _) => Scaffold(body: Center(child: Text('단어를 불러오지 못했어요: $error'))),
+      data: (words) {
+        if (words.isEmpty) {
+          return const Scaffold(body: Center(child: Text('이 카테고리엔 아직 단어가 없어요.')));
+        }
+        // index가 words 범위를 벗어나면(카테고리 전환 등) 안전하게 되돌림.
+        if (_currentIndex >= words.length) _currentIndex = words.length - 1;
+        final wide = Breakpoints.isWide(context);
+        return AppShell(
+          currentIndex: 1,
+          body: Padding(
+            padding: EdgeInsets.symmetric(horizontal: wide ? 0 : 20, vertical: wide ? 32 : 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(category.name, style: AppTextStyles.h1(context)),
+                SizedBox(height: wide ? 24 : 8),
+                Expanded(child: wide ? _buildWide(words) : _buildMobile(words)),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// 기존 스와이프(PageView) + 점 인디케이터 — 로직/애니메이션 그대로 유지.
+  Widget _buildMobile(List<Word> words) {
+    return Column(
+      children: [
+        Text('${_currentIndex + 1} / ${words.length}', style: AppTextStyles.bodySmall),
+        Expanded(
+          child: PageView.builder(
+            controller: _pageController,
+            itemCount: words.length,
+            onPageChanged: (index) => setState(() => _currentIndex = index),
+            itemBuilder: (context, index) => Center(child: _FlashcardWidget(word: words[index])),
+          ),
+        ),
+        Padding(padding: const EdgeInsets.symmetric(vertical: 16), child: _buildDots(words.length)),
+      ],
+    );
+  }
+
+  /// 와이드: 좌측 확대 플래시카드+화살표+인디케이터, 우측 전체 단어 목록 패널.
+  Widget _buildWide(List<Word> words) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          flex: 3,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const SizedBox(height: 8),
-              Text(
-                '${_currentIndex + 1} / ${words.length}',
-                style: AppTextStyles.bodySmall,
-              ),
-              Expanded(
-                child: PageView.builder(
-                  controller: _pageController,
-                  itemCount: words.length,
-                  onPageChanged: (index) => setState(() => _currentIndex = index),
-                  itemBuilder: (context, index) => Center(child: _FlashcardWidget(word: words[index])),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(
-                    words.length,
-                    (index) => Container(
-                      width: 8,
-                      height: 8,
-                      margin: const EdgeInsets.symmetric(horizontal: 3),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: index == _currentIndex ? AppColors.brandPrimary : AppColors.borderDefault,
-                      ),
-                    ),
+              Text('${_currentIndex + 1} / ${words.length}', style: AppTextStyles.bodySmall),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(
+                    onPressed: _currentIndex > 0 ? () => setState(() => _currentIndex--) : null,
+                    icon: const Icon(Icons.chevron_left),
                   ),
-                ),
+                  _FlashcardWidget(word: words[_currentIndex], width: 400),
+                  IconButton(
+                    onPressed: _currentIndex < words.length - 1 ? () => setState(() => _currentIndex++) : null,
+                    icon: const Icon(Icons.chevron_right),
+                  ),
+                ],
               ),
+              const SizedBox(height: 16),
+              _buildDots(words.length),
             ],
-          );
-        },
+          ),
+        ),
+        const SizedBox(width: 32),
+        Expanded(flex: 2, child: _WordListPanel(words: words, currentIndex: _currentIndex, onSelect: (i) => setState(() => _currentIndex = i))),
+      ],
+    );
+  }
+
+  Widget _buildDots(int count) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(
+        count,
+        (index) => Container(
+          width: 8,
+          height: 8,
+          margin: const EdgeInsets.symmetric(horizontal: 3),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: index == _currentIndex ? AppColors.brandPrimary : AppColors.borderDefault,
+          ),
+        ),
       ),
     );
   }
 }
 
+/// 와이드 전용 — 카테고리 전체 단어 목록, 현재 카드 하이라이트 + 클릭 시 점프.
+class _WordListPanel extends StatelessWidget {
+  const _WordListPanel({required this.words, required this.currentIndex, required this.onSelect});
+
+  final List<Word> words;
+  final int currentIndex;
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      itemCount: words.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 8),
+      itemBuilder: (context, index) {
+        final selected = index == currentIndex;
+        return HoverLift(
+          onTap: () => onSelect(index),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: selected ? AppColors.brandPrimary.withValues(alpha: 0.1) : AppColors.surfaceCard,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: selected ? AppColors.brandPrimary : AppColors.borderDefault),
+            ),
+            child: Text(
+              words[index].term,
+              style: selected ? AppTextStyles.h3.copyWith(color: AppColors.brandPrimary) : AppTextStyles.h3,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 /// Card / Flashcard (`04-Design` node `19:7`, 280×313) 스펙 구현.
+/// 와이드에서는 [width]로 확대(360~420px)해서 재사용.
 class _FlashcardWidget extends StatelessWidget {
-  const _FlashcardWidget({required this.word});
+  const _FlashcardWidget({required this.word, this.width = 280});
 
   final Word word;
+  final double width;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 280,
+      width: width,
       decoration: BoxDecoration(
         color: AppColors.surfaceCard,
         borderRadius: BorderRadius.circular(12),
@@ -126,7 +214,7 @@ class _FlashcardWidget extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(width: 280, height: 200, child: _Thumbnail(url: word.thumbnailAsset)),
+          SizedBox(width: width, height: width * (200 / 280), child: _Thumbnail(url: word.thumbnailAsset)),
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(

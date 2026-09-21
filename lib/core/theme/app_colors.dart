@@ -9,6 +9,9 @@ class AppColors {
   static const textPrimary = Color(0xFF0D2C54);
   static const textSecondary = Color(0xFF4F5A6B);
   static const bgSecondary = Color(0xFFF7F8FA);
+  /// 웹 리디자인(2026-09-21) 신규 — 섹션 배경 교차용 따뜻한 아이보리.
+  /// 카드/폼 배경엔 쓰지 않음, 홈/스탯 등 섹션 밴드 전용.
+  static const bgCream = Color(0xFFF5F1EA);
   static const borderDefault = Color(0xFFDEE3EA);
   static const surfaceCard = Color(0xFFFFFFFF);
   static const cardShadow = Color(0x140D2B54);

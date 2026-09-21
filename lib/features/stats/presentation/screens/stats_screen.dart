@@ -4,36 +4,73 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
-import '../../../../core/widgets/app_bottom_nav.dart';
+import '../../../../core/widgets/app_shell.dart';
+import '../../../../core/widgets/breakpoints.dart';
+import '../../../../core/widgets/hover_lift.dart';
 import '../../../categories/domain/category.dart';
 import '../../../categories/presentation/providers/category_providers.dart';
 import '../../../practice_sessions/presentation/providers/practice_session_providers.dart';
 
 /// PRD §5.3 통계 — 카테고리별 평균 정답률 시각화, 약점 카테고리 강조, 탭하면 바로 학습 진입.
+/// 웹 리디자인(2026-09-21, [[수어리 - 웹 리디자인 방향]]) 반영: `AppBar` + 세로 리스트였던 걸
+/// `AppShell` + 배경 교차(크림) + 반응형 그리드로 교체(집계 로직은 변경 없음).
 class StatsScreen extends ConsumerWidget {
   const StatsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final categoriesAsync = ref.watch(categoriesProvider);
+    final wide = Breakpoints.isWide(context);
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('통계')),
-      bottomNavigationBar: const AppBottomNav(currentIndex: 2),
-      body: categoriesAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => Center(child: Text('카테고리를 불러오지 못했어요: $error')),
-        data: (categories) {
-          if (categories.isEmpty) {
-            return const Center(child: Text('아직 등록된 카테고리가 없어요.'));
-          }
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: categories.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 12),
-            itemBuilder: (context, index) => _CategoryStatsCard(category: categories[index]),
-          );
-        },
+    return AppShell(
+      currentIndex: 2,
+      body: SingleChildScrollView(
+        child: Container(
+          color: AppColors.bgCream,
+          padding: EdgeInsets.fromLTRB(
+            wide ? 0 : 20,
+            wide ? 48 : 32,
+            wide ? 0 : 20,
+            wide ? 64 : 40,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('학습 통계', style: AppTextStyles.h1(context)),
+              const SizedBox(height: 20),
+              categoriesAsync.when(
+                loading: () => const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 32),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                error: (error, _) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 32),
+                  child: Center(child: Text('카테고리를 불러오지 못했어요: $error')),
+                ),
+                data: (categories) {
+                  if (categories.isEmpty) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 32),
+                      child: Center(child: Text('아직 등록된 카테고리가 없어요.')),
+                    );
+                  }
+                  return GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: 280,
+                      mainAxisExtent: 168,
+                      crossAxisSpacing: 16,
+                      mainAxisSpacing: 16,
+                    ),
+                    itemCount: categories.length,
+                    itemBuilder: (context, index) => _CategoryStatsCard(category: categories[index]),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -92,22 +129,21 @@ class _CategoryStatsCard extends ConsumerWidget {
       }
     }
 
-    return InkWell(
-      borderRadius: BorderRadius.circular(12),
+    return HoverLift(
       onTap: () => context.push('/learn/${category.slug}'),
       child: Container(
         decoration: BoxDecoration(
           color: AppColors.surfaceCard,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.borderDefault),
-          boxShadow: const [BoxShadow(color: AppColors.cardShadow, blurRadius: 8, offset: Offset(0, 2))],
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: const [BoxShadow(color: AppColors.cardShadow, blurRadius: 16, offset: Offset(0, 6))],
         ),
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Text(category.name, style: AppTextStyles.h3),
-            const SizedBox(height: 8),
+            Text(category.name, style: AppTextStyles.h3, maxLines: 1, overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 10),
             body,
           ],
         ),
