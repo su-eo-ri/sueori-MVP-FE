@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/config/supabase_config.dart';
 import 'core/router/app_router.dart';
+import 'core/theme/app_colors.dart';
 import 'features/auth/presentation/providers/auth_providers.dart';
 import 'features/camera/presentation/camera_view.dart';
 
@@ -34,7 +36,11 @@ class _SueoriAppState extends ConsumerState<SueoriApp> {
     final router = ref.watch(appRouterProvider);
     return MaterialApp.router(
       title: '수어리',
-      theme: ThemeData(colorSchemeSeed: Colors.deepPurple, useMaterial3: true),
+      theme: ThemeData(
+        colorSchemeSeed: AppColors.brandPrimary,
+        useMaterial3: true,
+        textTheme: GoogleFonts.notoSansKrTextTheme(),
+      ),
       routerConfig: router,
     );
   }
