@@ -3,11 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:scoring_poc/scoring_poc.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../camera/data/hand_landmark_bridge.dart';
 import '../../../camera/presentation/camera_view.dart';
+import '../../../reference_landmarks/presentation/providers/reference_landmark_providers.dart';
+import '../widgets/ghost_overlay_painter.dart';
 
 /// `/practice/:wordId` 카메라 라이프사이클/권한 UI 상태 6종.
 /// 채점 로직(scoring_poc, practice_sessions 저장)은 범위 밖 — 카메라 상태
@@ -122,18 +125,27 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // 정답 동작 고스트 오버레이용 참조 랜드마크. 동적 수어도 MVP에서는
+    // 첫 프레임만 정적으로 보여준다(프레임 애니메이션은 범위 밖).
+    final referenceLandmark = ref
+        .watch(referenceLandmarkByWordIdProvider(widget.wordId))
+        .maybeWhen(data: (value) => value, orElse: () => null);
+    final ghostLandmarks = referenceLandmark != null && referenceLandmark.frames.isNotEmpty
+        ? referenceLandmark.frames.first.landmarks
+        : null;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('연습하기'),
         leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: _goBack),
       ),
       body: Center(
-        child: Padding(padding: const EdgeInsets.all(24), child: _buildBody()),
+        child: Padding(padding: const EdgeInsets.all(24), child: _buildBody(ghostLandmarks)),
       ),
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(List<Point3>? ghostLandmarks) {
     switch (_state) {
       case _PracticeUiState.permissionPrompt:
         return _MessageView(
@@ -156,13 +168,18 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
       case _PracticeUiState.active:
         return Column(
           mainAxisSize: MainAxisSize.min,
-          children: [_cameraPreviewBox(), const SizedBox(height: 16), Text('카메라 인식 중이에요', style: AppTextStyles.h3)],
+          children: [
+            _cameraPreviewBox(ghostLandmarks: ghostLandmarks),
+            const SizedBox(height: 16),
+            Text('카메라 인식 중이에요', style: AppTextStyles.h3),
+          ],
         );
       case _PracticeUiState.noHandDetected:
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             _cameraPreviewBox(
+              ghostLandmarks: ghostLandmarks,
               overlay: const Icon(Icons.warning_amber_rounded, color: AppColors.stateWarning, size: 48),
             ),
             const SizedBox(height: 16),
@@ -215,21 +232,38 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
   }
 
   /// 480×360 카메라 프리뷰를 좁은 모바일 뷰포트에 맞춰 반응형으로 감싼다.
-  /// [overlay]가 주어지면 어두운 반투명 레이어 위에 아이콘을 겹쳐 그린다
-  /// (손미감지/저조도 상태용).
-  Widget _cameraPreviewBox({Widget? overlay}) {
+  /// [ghostLandmarks]가 주어지면 정답 동작 반투명 스켈레톤을 프리뷰 위에
+  /// 겹쳐 그린다. [overlay]가 주어지면 그 위에 어두운 반투명 레이어 +
+  /// 아이콘을 한 번 더 겹친다(손미감지/저조도 상태용) — 쌓는 순서는 카메라
+  /// → 고스트 스켈레톤 → 경고 레이어.
+  Widget _cameraPreviewBox({List<Point3>? ghostLandmarks, Widget? overlay}) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth.clamp(0, 480).toDouble();
+        final height = width * 3 / 4;
         final preview = SizedBox(
           width: width,
-          height: width * 3 / 4,
+          height: height,
           child: const FittedBox(fit: BoxFit.contain, child: CameraPreview()),
         );
-        if (overlay == null) return preview;
+        if (ghostLandmarks == null && overlay == null) return preview;
         return Stack(
           alignment: Alignment.center,
-          children: [preview, Positioned.fill(child: ColoredBox(color: Colors.black54, child: Center(child: overlay)))],
+          children: [
+            preview,
+            if (ghostLandmarks != null)
+              SizedBox(
+                width: width,
+                height: height,
+                child: CustomPaint(painter: GhostOverlayPainter(landmarks: ghostLandmarks)),
+              ),
+            if (overlay != null)
+              SizedBox(
+                width: width,
+                height: height,
+                child: ColoredBox(color: Colors.black54, child: Center(child: overlay)),
+              ),
+          ],
         );
       },
     );
