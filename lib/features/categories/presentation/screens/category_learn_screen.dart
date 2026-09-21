@@ -7,6 +7,8 @@ import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/app_shell.dart';
 import '../../../../core/widgets/breakpoints.dart';
 import '../../../../core/widgets/hover_lift.dart';
+import '../../../favorites/domain/favorite.dart';
+import '../../../favorites/presentation/providers/favorite_providers.dart';
 import '../../domain/category.dart';
 import '../../domain/word.dart';
 import '../providers/category_providers.dart';
@@ -194,14 +196,41 @@ class _WordListPanel extends StatelessWidget {
 
 /// Card / Flashcard (`04-Design` node `19:7`, 280×313) 스펙 구현.
 /// 와이드에서는 [width]로 확대(360~420px)해서 재사용.
-class _FlashcardWidget extends StatelessWidget {
+class _FlashcardWidget extends ConsumerWidget {
   const _FlashcardWidget({required this.word, this.width = 280});
 
   final Word word;
   final double width;
 
+  Future<void> _toggleFavorite(BuildContext context, WidgetRef ref, Favorite? existing) async {
+    try {
+      if (existing == null) {
+        await ref.read(favoriteRepositoryProvider).addManual(word.id);
+      } else {
+        await ref.read(favoriteRepositoryProvider).remove(existing.id);
+      }
+      ref.invalidate(myFavoritesProvider);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('즐겨찾기 처리에 실패했어요: $e')));
+      }
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final favoritesAsync = ref.watch(myFavoritesProvider);
+    final existingFavorite = favoritesAsync.maybeWhen(
+      data: (favorites) {
+        for (final f in favorites) {
+          if (f.wordId == word.id) return f;
+        }
+        return null;
+      },
+      orElse: () => null,
+    );
+    final isFavorited = existingFavorite != null;
+
     return Container(
       width: width,
       decoration: BoxDecoration(
@@ -214,7 +243,31 @@ class _FlashcardWidget extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(width: width, height: width * (200 / 280), child: _Thumbnail(url: word.thumbnailAsset)),
+          Stack(
+            children: [
+              SizedBox(width: width, height: width * (200 / 280), child: _Thumbnail(url: word.thumbnailAsset)),
+              Positioned(
+                top: 4,
+                right: 4,
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: () => _toggleFavorite(context, ref, existingFavorite),
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: const BoxDecoration(color: Colors.white70, shape: BoxShape.circle),
+                      child: Icon(
+                        isFavorited ? Icons.star : Icons.star_border,
+                        color: isFavorited ? AppColors.brandPrimary : AppColors.textSecondary,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
