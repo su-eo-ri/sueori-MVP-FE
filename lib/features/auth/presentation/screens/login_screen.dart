@@ -110,6 +110,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                   ),
                   Center(
+                    child: Text(
+                      '이 기기의 게스트 기록은 이어지지 않아요',
+                      style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Center(
                     child: TextButton(
                       onPressed: () => context.canPop() ? context.pop() : context.go('/mypage'),
                       child: Text('나중에 할게요', style: AppTextStyles.bodySmall),
