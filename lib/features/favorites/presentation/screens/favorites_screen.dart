@@ -25,30 +25,40 @@ class FavoritesScreen extends ConsumerWidget {
     final favoritesAsync = ref.watch(myFavoritesProvider);
     final wide = Breakpoints.isWide(context);
 
+    final content = Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('즐겨찾기', style: AppTextStyles.h1(context)),
+          const SizedBox(height: 16),
+          Expanded(
+            child: favoritesAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (error, _) => Center(child: Text('즐겨찾기를 불러오지 못했어요: $error')),
+              data: (favorites) {
+                if (favorites.isEmpty) {
+                  return _EmptyState(onGoLearn: () => context.go('/'));
+                }
+                return wide ? _FavoritesGrid(favorites: favorites) : _FavoritesList(favorites: favorites);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
     return AppShell(
       currentIndex: 3,
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('즐겨찾기', style: AppTextStyles.h1(context)),
-            const SizedBox(height: 16),
-            Expanded(
-              child: favoritesAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (error, _) => Center(child: Text('즐겨찾기를 불러오지 못했어요: $error')),
-                data: (favorites) {
-                  if (favorites.isEmpty) {
-                    return _EmptyState(onGoLearn: () => context.go('/'));
-                  }
-                  return wide ? _FavoritesGrid(favorites: favorites) : _FavoritesList(favorites: favorites);
-                },
+      // 그리드가 2열 고정이라 그리드 자체 캡만으론 제목("즐겨찾기")이 그리드보다
+      // 왼쪽에서 시작해버린다 — 제목+그리드를 한 덩어리로 로컬 캡을 건다.
+      body: wide
+          ? Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: Breakpoints.contentMaxWidth),
+                child: content,
               ),
-            ),
-          ],
-        ),
-      ),
+            )
+          : content,
     );
   }
 }
@@ -75,20 +85,16 @@ class _FavoritesGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: Breakpoints.contentMaxWidth),
-        child: GridView.builder(
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            mainAxisSpacing: 16,
-            crossAxisSpacing: 16,
-            mainAxisExtent: 88,
-          ),
-          itemCount: favorites.length,
-          itemBuilder: (context, index) => _FavoriteCard(favorite: favorites[index]),
-        ),
+    // 폭 캡은 이제 부모(`FavoritesScreen.body`)에서 제목과 함께 한 번만 건다.
+    return GridView.builder(
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        mainAxisSpacing: 16,
+        crossAxisSpacing: 16,
+        mainAxisExtent: 88,
       ),
+      itemCount: favorites.length,
+      itemBuilder: (context, index) => _FavoriteCard(favorite: favorites[index]),
     );
   }
 }

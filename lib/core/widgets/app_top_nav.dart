@@ -20,29 +20,26 @@ class AppTopNav extends StatelessWidget {
         color: AppColors.surfaceCard,
         border: Border(bottom: BorderSide(color: AppColors.borderDefault)),
       ),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: Breakpoints.contentMaxWidth),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Row(
-              children: [
-                InkWell(
-                  onTap: () => context.go('/'),
-                  child: const Text(
-                    '수어리',
-                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 22, color: AppColors.textPrimary),
-                  ),
-                ),
-                const SizedBox(width: 48),
-                // "학습" 탭(index 1)은 홈과 같은 경로라 톱네비에선 중복 링크로 안 보여주고
-                // 홈/통계/즐겨찾기 3개만 노출(마이페이지는 우측 아바타 칩으로 분리).
-                for (final i in const [0, 2, 3]) _TopNavLink(index: i, active: i == currentIndex),
-                const Spacer(),
-                _ProfileChip(active: currentIndex == 4),
-              ],
+      // AppShell.body와 같은 `wideGutter`만 두고 가운데 정렬 캡은 없앤다 —
+      // 로고/프로필 칩이 body 콘텐츠와 같은 좌우 기준선에 맞도록.
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: Breakpoints.wideGutter),
+        child: Row(
+          children: [
+            InkWell(
+              onTap: () => context.go('/'),
+              child: const Text(
+                '수어리',
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 22, color: AppColors.textPrimary),
+              ),
             ),
-          ),
+            const SizedBox(width: 48),
+            // "학습" 탭(index 1)은 홈과 같은 경로라 톱네비에선 중복 링크로 안 보여주고
+            // 홈/통계/즐겨찾기 3개만 노출(마이페이지는 우측 아바타 칩으로 분리).
+            for (final i in const [0, 2, 3]) _TopNavLink(index: i, active: i == currentIndex),
+            const Spacer(),
+            _ProfileChip(active: currentIndex == 4),
+          ],
         ),
       ),
     );

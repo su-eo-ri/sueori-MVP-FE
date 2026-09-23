@@ -65,19 +65,30 @@ class _CategoryLearnScreenState extends ConsumerState<CategoryLearnScreen> {
         // index가 words 범위를 벗어나면(카테고리 전환 등) 안전하게 되돌림.
         if (_currentIndex >= words.length) _currentIndex = words.length - 1;
         final wide = Breakpoints.isWide(context);
+        final content = Padding(
+          padding: EdgeInsets.symmetric(horizontal: wide ? 0 : 20, vertical: wide ? 32 : 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(category.name, style: AppTextStyles.h1(context)),
+              SizedBox(height: wide ? 24 : 8),
+              Expanded(child: wide ? _buildWide(words) : _buildMobile(words)),
+            ],
+          ),
+        );
         return AppShell(
           currentIndex: 1,
-          body: Padding(
-            padding: EdgeInsets.symmetric(horizontal: wide ? 0 : 20, vertical: wide ? 32 : 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(category.name, style: AppTextStyles.h1(context)),
-                SizedBox(height: wide ? 24 : 8),
-                Expanded(child: wide ? _buildWide(words) : _buildMobile(words)),
-              ],
-            ),
-          ),
+          // 이 화면은 (플래시카드 고정폭 + 단어 목록) 2분할이라 `AppShell`의
+          // 공용 여백만으로는 화면이 넓을수록 목록 패널이 한없이 늘어난다 —
+          // 그래서 다른 화면과 달리 여기서만 로컬로 폭 캡을 건다.
+          body: wide
+              ? Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: Breakpoints.contentMaxWidth),
+                    child: content,
+                  ),
+                )
+              : content,
         );
       },
     );
