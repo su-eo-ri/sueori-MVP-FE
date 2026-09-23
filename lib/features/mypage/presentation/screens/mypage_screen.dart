@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../core/theme/app_colors.dart';
@@ -129,20 +130,12 @@ class _GuestView extends StatelessWidget {
         const SizedBox(height: 24),
         FilledButton(
           style: FilledButton.styleFrom(backgroundColor: AppColors.brandPrimary),
-          onPressed: () => _loginWithGoogle(context),
+          // 2026-09-22: 여기서 바로 linkGoogleIdentity를 호출하지 않고 전용 /login
+          // 화면으로 이동 — 실제 인증 로직은 그대로 LoginScreen이 재사용한다.
+          onPressed: () => context.push('/login'),
           child: const Text('Google로 로그인'),
         ),
       ],
     );
-  }
-
-  Future<void> _loginWithGoogle(BuildContext context) async {
-    try {
-      await ref.read(authRepositoryProvider).linkGoogleIdentity(redirectTo: Uri.base.toString());
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('로그인에 실패했어요: $e')));
-      }
-    }
   }
 }
