@@ -23,10 +23,10 @@ class LoginScreen extends ConsumerStatefulWidget {
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _loading = false;
 
-  Future<void> _continueWithGoogle() async {
+  Future<void> _run(Future<void> Function() action) async {
     setState(() => _loading = true);
     try {
-      await ref.read(authRepositoryProvider).linkGoogleIdentity(redirectTo: Uri.base.toString());
+      await action();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('로그인에 실패했어요: $e')));
@@ -89,7 +89,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         backgroundColor: AppColors.brandPrimary,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
-                      onPressed: _loading ? null : _continueWithGoogle,
+                      onPressed: _loading ? null : () => _run(ref.read(authRepositoryProvider).linkGoogleIdentity),
                       icon: _loading
                           ? const SizedBox(
                               width: 18,
@@ -101,6 +101,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
+                  // 다른 기기에서 이미 Google을 연결한 사용자는 linkIdentity가 항상
+                  // identity_already_exists로 실패하므로 기존 계정 로그인 경로가 따로 필요하다.
+                  Center(
+                    child: TextButton(
+                      onPressed: _loading ? null : () => _run(ref.read(authRepositoryProvider).signInWithGoogle),
+                      child: Text('이미 연결한 계정이 있나요? 기존 계정으로 로그인', style: AppTextStyles.bodySmall),
+                    ),
+                  ),
                   Center(
                     child: TextButton(
                       onPressed: () => context.canPop() ? context.pop() : context.go('/mypage'),

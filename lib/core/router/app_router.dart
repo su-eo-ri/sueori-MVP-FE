@@ -13,11 +13,9 @@ import '../../features/stats/presentation/screens/stats_screen.dart';
 final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/',
-    // Supabase OAuth 콜백 에러(예: ?error_code=identity_already_exists)가 붙은 채로
-    // 리다이렉트되면 해시 경로가 알려진 라우트와 안 맞아 go_router 기본 에러 화면이
-    // 뜬다 — 사용자에게 더 도움이 안 되니 홈으로 조용히 복구한다. 실제 에러 메시지는
-    // main.dart에서 쿼리스트링을 따로 읽어 스낵바로 안내한다.
-    errorBuilder: (context, state) => const HomeScreen(),
+    // 알 수 없는 경로(OAuth 에러 프래그먼트 `#error=...` 포함)는 URL까지 `/`로 정리한다.
+    // OAuth 에러 파라미터는 main()에서 runApp 전에 미리 읽어두므로 여기서 지워도 된다.
+    onException: (_, _, router) => router.go('/'),
     routes: [
       GoRoute(path: '/', builder: (context, state) => const HomeScreen()),
       GoRoute(
