@@ -45,7 +45,8 @@ Map<String, dynamic> buildComparisonSummary({
     ..sort((a, b) => deltas[b].compareTo(deltas[a]));
 
   return {
-    'version': 1,
+    // v2: 정규화 스케일이 손목~MCP9에서 손바닥 5점 쌍별 최대 거리로 바뀜 (v1 행과 좌표 스케일이 다름)
+    'version': 2,
     'algorithm': wordType == WordType.staticSign ? 'distance' : 'dtw',
     'referenceFrameIndex': referenceIndex,
     'userTimestampMs': user.tMs,

@@ -17,6 +17,7 @@ import '../../../categories/presentation/providers/category_providers.dart';
 import '../../../practice_sessions/presentation/providers/practice_session_providers.dart';
 import '../../../reference_landmarks/presentation/providers/reference_landmark_providers.dart';
 import '../../../scoring/domain/comparison_summary.dart';
+import '../../../scoring/domain/hand_track_scoring.dart';
 import '../../../scoring/domain/word_type.dart';
 import '../../../scoring/presentation/providers/scoring_providers.dart';
 import '../widgets/ghost_overlay_painter.dart';
@@ -166,32 +167,27 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
         return;
       }
 
-      final captured = word.type == WordType.staticSign ? _captureStatic() : await _captureDynamic();
+      final isStatic = word.type == WordType.staticSign;
+      final captured = isStatic ? _captureStatic() : await _captureDynamic(recordingDurationFor(reference.frames));
       if (!mounted) return;
-      if (captured.isEmpty) {
-        _failScore(_handFailMessage);
-        return;
-      }
 
       final referenceFrames = reference.frames.map((f) => f.landmarks).toList();
-      final double score;
-      try {
-        score = ref
-            .read(scoringServiceProvider)
-            .score(
-              wordType: word.type,
-              referenceFrames: referenceFrames,
-              candidateFrames: captured.map((f) => f.points).toList(),
-            )
-            .score;
-      } on ArgumentError {
+      final best = scoreBestHand(
+        service: ref.read(scoringServiceProvider),
+        wordType: word.type,
+        referenceFrames: referenceFrames,
+        captured: captured,
+        minFrames: isStatic ? 1 : 5,
+      );
+      if (best == null) {
         _failScore(_handFailMessage);
         return;
       }
+      final score = best.score;
       final summary = buildComparisonSummary(
         wordType: word.type,
         referenceFrames: referenceFrames,
-        userFrames: captured,
+        userFrames: best.frames,
       );
 
       setState(() => _scoreStatus = '결과를 저장하고 있어요…');
@@ -235,28 +231,26 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
     if (mounted) setState(() => _scoreError = message);
   }
 
-  List<CapturedFrame> _captureStatic() {
-    final hand = _bridge.getLandmarks()?.firstOrNull;
-    if (hand == null || hand.points.length != 21) return const [];
-    return [CapturedFrame(tMs: 0, points: hand.points, handedness: hand.handedness)];
-  }
+  /// 현재 프레임에서 잡힌 손 전부(최대 2개). 손별 채점은 [scoreBestHand]가 한다.
+  List<CapturedFrame> _captureHands(int tMs) => [
+    for (final hand in _bridge.getLandmarks() ?? const <HandLandmark>[])
+      if (hand.points.length == 21) CapturedFrame(tMs: tMs, points: hand.points, handedness: hand.handedness),
+  ];
 
-  /// 3초 동안 100ms 간격으로 첫 번째 손을 모은다. 손이 안 잡힌 프레임은 건너뛴다.
-  Future<List<CapturedFrame>> _captureDynamic() async {
-    const duration = Duration(seconds: 3);
+  List<CapturedFrame> _captureStatic() => _captureHands(0);
+
+  /// [duration] 동안 100ms 간격으로 잡힌 손을 모두 모은다. 손이 안 잡힌 프레임은 건너뛴다.
+  Future<List<CapturedFrame>> _captureDynamic(Duration duration) async {
     final frames = <CapturedFrame>[];
     final watch = Stopwatch()..start();
     while (watch.elapsed < duration) {
       if (!mounted) return const [];
       final remaining = (duration - watch.elapsed).inMilliseconds / 1000;
       setState(() => _scoreStatus = '동작을 녹화하고 있어요… ${remaining.ceil()}초');
-      final hand = _bridge.getLandmarks()?.firstOrNull;
-      if (hand != null && hand.points.length == 21) {
-        frames.add(CapturedFrame(tMs: watch.elapsedMilliseconds, points: hand.points, handedness: hand.handedness));
-      }
+      frames.addAll(_captureHands(watch.elapsedMilliseconds));
       await Future.delayed(const Duration(milliseconds: 100));
     }
-    return frames.length < 5 ? const [] : frames;
+    return frames;
   }
 
   List<Widget> _scoreControls() {

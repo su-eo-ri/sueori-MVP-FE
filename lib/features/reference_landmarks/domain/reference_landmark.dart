@@ -5,10 +5,13 @@ import 'package:scoring_poc/scoring_poc.dart';
 /// 원본 좌표계(정규화된 이미지 좌표 0~1, WRIST 기준 정규화 이전)와 동일해서
 /// `mediapipe_bridge.js`의 캔버스 렌더링과 같은 방식으로 그대로 겹쳐 그릴 수 있다.
 class ReferenceHandFrame {
-  const ReferenceHandFrame({required this.landmarks, this.handedness});
+  const ReferenceHandFrame({required this.landmarks, this.handedness, this.tMs});
 
   final List<Point3> landmarks;
   final String? handedness;
+
+  /// 원본 영상 기준 시간(ms). BE 정제본부터 들어가며, 이전 데이터에는 없다.
+  final int? tMs;
 
   factory ReferenceHandFrame.fromJson(Map<String, dynamic> json) => ReferenceHandFrame(
     landmarks: (json['landmarks'] as List)
@@ -16,6 +19,7 @@ class ReferenceHandFrame {
         .map((p) => Point3((p['x'] as num).toDouble(), (p['y'] as num).toDouble(), (p['z'] as num).toDouble()))
         .toList(),
     handedness: json['handedness'] as String?,
+    tMs: (json['tMs'] as num?)?.round(),
   );
 }
 
