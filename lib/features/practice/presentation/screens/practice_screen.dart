@@ -239,16 +239,21 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
 
   List<CapturedFrame> _captureStatic() => _captureHands(0);
 
-  /// [duration] 동안 100ms 간격으로 잡힌 손을 모두 모은다. 손이 안 잡힌 프레임은 건너뛴다.
+  /// [duration] 동안 33ms(약 30fps) 간격으로 잡힌 손을 모두 모은다. 손이 안 잡힌 프레임은 건너뛴다.
+  /// 100ms 간격은 빠른 동작(60fps 기준 영상 단어)의 중간 모양을 놓쳐 정확히 따라 해도 80점을 못 넘었다.
   Future<List<CapturedFrame>> _captureDynamic(Duration duration) async {
     final frames = <CapturedFrame>[];
     final watch = Stopwatch()..start();
+    int? shownSeconds;
     while (watch.elapsed < duration) {
       if (!mounted) return const [];
-      final remaining = (duration - watch.elapsed).inMilliseconds / 1000;
-      setState(() => _scoreStatus = '동작을 녹화하고 있어요… ${remaining.ceil()}초');
+      final remaining = ((duration - watch.elapsed).inMilliseconds / 1000).ceil();
+      if (remaining != shownSeconds) {
+        shownSeconds = remaining;
+        setState(() => _scoreStatus = '동작을 녹화하고 있어요… $remaining초');
+      }
       frames.addAll(_captureHands(watch.elapsedMilliseconds));
-      await Future.delayed(const Duration(milliseconds: 100));
+      await Future.delayed(const Duration(milliseconds: 33));
     }
     return frames;
   }
