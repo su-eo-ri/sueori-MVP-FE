@@ -11,8 +11,6 @@ import '../../features/practice_sessions/presentation/screens/result_screen.dart
 import '../../features/stats/presentation/screens/stats_screen.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
-  // push로 연 화면(학습/연습/로그인)도 URL에 반영해야 새로고침·링크 공유 시 같은 화면이 열린다.
-  GoRouter.optionURLReflectsImperativeAPIs = true;
   return GoRouter(
     initialLocation: '/',
     // 알 수 없는 경로(OAuth 에러 프래그먼트 `#error=...` 포함)는 URL까지 `/`로 정리한다.
