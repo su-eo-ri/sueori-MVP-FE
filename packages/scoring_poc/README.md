@@ -2,16 +2,17 @@
 
 `수어리 - PRD v1` 5.1의 채점 알고리즘 선택("정적=코사인 유사도, 동적=DTW → 0~100점")이
 실제로 말이 되는 동작을 하는지 검증하는 PoC. 카메라/MediaPipe 연동은
-`../hand_landmark_poc`가 담당하고, 여기서는 그 출력물(21개 랜드마크 / 랜드마크 시퀀스)을
+`hand_landmark_poc`(이 저장소 밖 `project-sueori/poc/`에 있는 별도 PoC)가 담당하고, 여기서는 그 출력물(21개 랜드마크 / 랜드마크 시퀀스)을
 입력받아 점수를 내는 순수 로직만 검증한다. **실제 카메라 데이터가 아닌 합성(synthetic)
 테스트 데이터**로 검증했다 — 알고리즘 자체의 동작을 확인하는 단계.
 
 ## 실행 방법
+앱 저장소(`sueori-MVP-FE`) 루트 기준. 앱은 `pubspec.yaml`에서 `path: packages/scoring_poc`로 이 패키지를 참조한다.
 ```
-cd poc/scoring_poc
-flutter test                       # 13개 테스트 실행
-dart run bin/debug_distances.dart  # decayFactor 산출 근거가 된 실제 거리값 확인
+cd packages/scoring_poc
+flutter test
 ```
+decayFactor 산출용 디버그 스크립트(`bin/`)는 저장소로 옮길 때 포함하지 않았다. 원본은 저장소 밖 `project-sueori/poc/scoring_poc/bin/`에 있다.
 
 ## 정규화
 21개 랜드마크를 (1) 손목을 원점으로 평행이동, (2) 손목~중지 MCP 거리로 스케일 정규화.
@@ -62,7 +63,7 @@ DTW는 최적 정렬을 찾도록 설계돼 있어서, 완전히 다른 두 동�
 - `lib/src/distance_scorer.dart` — 정적 채점(거리 기반, 권장안)
 - `lib/src/dtw_scorer.dart` — 동적 채점(DTW)
 - `test/synthetic_hand.dart` — 합성 테스트 데이터(펼친 손/주먹 기준 포즈, 시퀀스 생성기)
-- `bin/debug_distances.dart` — decayFactor 산출용 1회성 디버그 스크립트
+- (저장소에는 없음) `bin/debug_distances.dart` — decayFactor 산출용 1회성 디버그 스크립트, 원본 PoC 폴더에만 있음
 
 ## 발견 4 (2026-09-08 추가) — NaN/Infinity 좌표가 섞이면 스코어러가 오히려 만점을 준다
 엣지 케이스 테스트(`test/edge_cases_test.dart`) 추가 중 발견: 랜드마크 좌표 하나라도
