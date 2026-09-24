@@ -19,6 +19,7 @@ void main() {
     expect(summary['algorithm'], 'distance');
     expect(summary['handedness'], 'right');
     expect(summary['userLandmarks'], hasLength(21));
+    expect((summary['userLandmarks'] as List).first, [0.0, 0.0, 0.0]);
     expect(summary['landmarkDeltas'], hasLength(21));
     expect((summary['weakestLandmarks'] as List).first, 8);
   });

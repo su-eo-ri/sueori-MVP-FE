@@ -39,10 +39,8 @@ Map<String, dynamic> buildComparisonSummary({
   }
 
   final user = userFrames[userIndex];
-  final deltas = _perLandmarkDeltas(
-    normalizeAndFlatten(user.points),
-    normalizeAndFlatten(referenceFrames[referenceIndex]),
-  );
+  final userNormalized = normalizeAndFlatten(user.points);
+  final deltas = _perLandmarkDeltas(userNormalized, normalizeAndFlatten(referenceFrames[referenceIndex]));
   final weakest = List<int>.generate(deltas.length, (i) => i)
     ..sort((a, b) => deltas[b].compareTo(deltas[a]));
 
@@ -52,7 +50,11 @@ Map<String, dynamic> buildComparisonSummary({
     'referenceFrameIndex': referenceIndex,
     'userTimestampMs': user.tMs,
     'handedness': user.handedness?.toLowerCase(),
-    'userLandmarks': [for (final p in user.points) [_r(p.x), _r(p.y), _r(p.z)]],
+    // ERD: 손목 기준 정규화 좌표로 저장 (landmarkDeltas와 같은 좌표계)
+    'userLandmarks': [
+      for (var i = 0; i < userNormalized.length; i += 3)
+        [_r(userNormalized[i]), _r(userNormalized[i + 1]), _r(userNormalized[i + 2])],
+    ],
     'landmarkDeltas': [for (final d in deltas) _r(d)],
     'weakestLandmarks': weakest.take(3).toList(),
   };
