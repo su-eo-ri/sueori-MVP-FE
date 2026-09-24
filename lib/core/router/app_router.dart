@@ -25,7 +25,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/practice/:wordId',
-        builder: (context, state) => PracticeScreen(wordId: state.pathParameters['wordId']!),
+        builder: (context, state) => PracticeScreen(
+          wordId: state.pathParameters['wordId']!,
+          retryOfSessionId: state.uri.queryParameters['retryOf'],
+        ),
       ),
       GoRoute(
         path: '/result/:sessionId',

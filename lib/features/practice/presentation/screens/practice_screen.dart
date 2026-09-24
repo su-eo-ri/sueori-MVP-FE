@@ -4,24 +4,34 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:scoring_poc/scoring_poc.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/widgets/breakpoints.dart';
+import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../../camera/data/hand_landmark_bridge.dart';
 import '../../../camera/presentation/camera_view.dart';
+import '../../../categories/presentation/providers/category_providers.dart';
+import '../../../practice_sessions/presentation/providers/practice_session_providers.dart';
 import '../../../reference_landmarks/presentation/providers/reference_landmark_providers.dart';
+import '../../../scoring/domain/comparison_summary.dart';
+import '../../../scoring/domain/word_type.dart';
+import '../../../scoring/presentation/providers/scoring_providers.dart';
 import '../widgets/ghost_overlay_painter.dart';
 
 /// `/practice/:wordId` 카메라 라이프사이클/권한 UI 상태 6종.
-/// 채점 로직(scoring_poc, practice_sessions 저장)은 범위 밖 — 카메라 상태
-/// 전이만 다룬다.
+/// 채점은 active 상태에서 "채점하기"로 시작한다: 캡처 → 채점 → practice_sessions
+/// 저장 → `/result/:id`.
 enum _PracticeUiState { permissionPrompt, active, permissionDenied, noHandDetected, noCamera, recognitionFailed }
 
+const _handFailMessage = '손 인식에 실패했어요. 손이 화면에 잘 보이게 하고 다시 시도해주세요.';
+
 class PracticeScreen extends ConsumerStatefulWidget {
-  const PracticeScreen({required this.wordId, super.key});
+  const PracticeScreen({required this.wordId, this.retryOfSessionId, super.key});
 
   final String wordId;
+  final String? retryOfSessionId;
 
   @override
   ConsumerState<PracticeScreen> createState() => _PracticeScreenState();
@@ -34,6 +44,9 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
   Timer? _handPollTimer;
   int _missedHandPolls = 0;
   bool _cameraEverStarted = false;
+  bool _scoring = false;
+  String? _scoreStatus;
+  String? _scoreError;
 
   @override
   void dispose() {
@@ -116,6 +129,123 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
     }
   }
 
+  Future<void> _score() async {
+    if (_scoring) return;
+    setState(() {
+      _scoring = true;
+      _scoreError = null;
+      _scoreStatus = null;
+    });
+    try {
+      final word = await ref.read(wordByIdProvider(widget.wordId).future);
+      final reference = await ref.read(referenceLandmarkByWordIdProvider(widget.wordId).future);
+      if (word == null || reference == null || reference.frames.isEmpty) {
+        _failScore('이 단어는 아직 기준 동작 데이터가 없어서 채점할 수 없어요.');
+        return;
+      }
+
+      final captured = word.type == WordType.staticSign ? _captureStatic() : await _captureDynamic();
+      if (!mounted) return;
+      if (captured.isEmpty) {
+        _failScore(_handFailMessage);
+        return;
+      }
+
+      final referenceFrames = reference.frames.map((f) => f.landmarks).toList();
+      final double score;
+      try {
+        score = ref
+            .read(scoringServiceProvider)
+            .score(
+              wordType: word.type,
+              referenceFrames: referenceFrames,
+              candidateFrames: captured.map((f) => f.points).toList(),
+            )
+            .score;
+      } on ArgumentError {
+        _failScore(_handFailMessage);
+        return;
+      }
+      final summary = buildComparisonSummary(
+        wordType: word.type,
+        referenceFrames: referenceFrames,
+        userFrames: captured,
+      );
+
+      setState(() => _scoreStatus = '결과를 저장하고 있어요…');
+      final auth = ref.read(authRepositoryProvider);
+      await auth.ensureSignedIn();
+      final session = await ref
+          .read(practiceSessionRepositoryProvider)
+          .insert(
+            userId: auth.currentUser!.id,
+            wordId: widget.wordId,
+            score: score.round().clamp(0, 100),
+            comparisonSummary: summary,
+            retryOfSessionId: widget.retryOfSessionId,
+          );
+      ref.invalidate(myPracticeSessionsProvider);
+      if (!mounted) return;
+      context.go('/result/${session.id}');
+    } on PostgrestException catch (e) {
+      if (!mounted) return;
+      if (e.code == '42501') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('무료 체험 채점을 모두 사용했거나 로그인이 필요한 카테고리예요. 로그인하면 계속 연습할 수 있어요.')),
+        );
+        context.go('/login');
+        return;
+      }
+      _failScore('결과를 저장하지 못했어요. 잠시 후 다시 시도해주세요.');
+    } catch (_) {
+      _failScore('채점 중 문제가 생겼어요. 잠시 후 다시 시도해주세요.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _scoring = false;
+          _scoreStatus = null;
+        });
+      }
+    }
+  }
+
+  void _failScore(String message) {
+    if (mounted) setState(() => _scoreError = message);
+  }
+
+  List<CapturedFrame> _captureStatic() {
+    final hand = _bridge.getLandmarks()?.firstOrNull;
+    if (hand == null || hand.points.length != 21) return const [];
+    return [CapturedFrame(tMs: 0, points: hand.points, handedness: hand.handedness)];
+  }
+
+  /// 3초 동안 100ms 간격으로 첫 번째 손을 모은다. 손이 안 잡힌 프레임은 건너뛴다.
+  Future<List<CapturedFrame>> _captureDynamic() async {
+    const duration = Duration(seconds: 3);
+    final frames = <CapturedFrame>[];
+    final watch = Stopwatch()..start();
+    while (watch.elapsed < duration) {
+      if (!mounted) return const [];
+      final remaining = (duration - watch.elapsed).inMilliseconds / 1000;
+      setState(() => _scoreStatus = '동작을 녹화하고 있어요… ${remaining.ceil()}초');
+      final hand = _bridge.getLandmarks()?.firstOrNull;
+      if (hand != null && hand.points.length == 21) {
+        frames.add(CapturedFrame(tMs: watch.elapsedMilliseconds, points: hand.points, handedness: hand.handedness));
+      }
+      await Future.delayed(const Duration(milliseconds: 100));
+    }
+    return frames.length < 5 ? const [] : frames;
+  }
+
+  List<Widget> _scoreControls() {
+    return [
+      _primaryButton(_scoring ? '채점 중…' : '채점하기', _scoring ? null : _score),
+      if (_scoreStatus != null) Text(_scoreStatus!, style: AppTextStyles.bodySmall),
+      if (_scoreError != null)
+        Text(_scoreError!, style: AppTextStyles.bodySmall.copyWith(color: AppColors.stateError)),
+    ];
+  }
+
   void _goBack() {
     if (context.canPop()) {
       context.pop();
@@ -164,7 +294,11 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
       ),
       _PracticeUiState.active => (
         _cameraPreviewBox(ghostLandmarks: ghostLandmarks),
-        const _GuidancePanel(title: '카메라 인식 중이에요', body: '카메라를 향해 동작을 취해보세요.'),
+        _GuidancePanel(
+          title: '카메라 인식 중이에요',
+          body: '카메라를 향해 동작을 취한 뒤 채점하기를 눌러보세요.',
+          actions: _scoreControls(),
+        ),
       ),
       _PracticeUiState.noHandDetected => (
         _cameraPreviewBox(
@@ -230,7 +364,7 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
     );
   }
 
-  Widget _primaryButton(String label, VoidCallback onPressed) {
+  Widget _primaryButton(String label, VoidCallback? onPressed) {
     return FilledButton(
       style: FilledButton.styleFrom(
         backgroundColor: AppColors.brandPrimary,
@@ -269,6 +403,8 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
             _cameraPreviewBox(ghostLandmarks: ghostLandmarks),
             const SizedBox(height: 16),
             Text('카메라 인식 중이에요', style: AppTextStyles.h3),
+            const SizedBox(height: 16),
+            for (final control in _scoreControls()) ...[control, const SizedBox(height: 8)],
           ],
         );
       case _PracticeUiState.noHandDetected:

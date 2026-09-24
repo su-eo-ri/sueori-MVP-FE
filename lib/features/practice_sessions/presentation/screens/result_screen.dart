@@ -196,7 +196,7 @@ class _CtaButtons extends ConsumerWidget {
       children: [
         Expanded(
           child: OutlinedButton(
-            onPressed: () => context.push('/practice/${session.wordId}'),
+            onPressed: () => context.push('/practice/${session.wordId}?retryOf=${session.id}'),
             child: const Text('다시 도전'),
           ),
         ),
