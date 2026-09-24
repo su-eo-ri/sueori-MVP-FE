@@ -39,7 +39,7 @@ dependencies:
   google_fonts: ^6.2.1
   supabase_flutter: ^2.17.2
   scoring_poc:
-    path: ../poc/scoring_poc
+    path: packages/scoring_poc
   web: ^1.1.1
 
 dev_dependencies:
