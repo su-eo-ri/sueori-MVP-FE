@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:web/web.dart' as web;
@@ -15,6 +16,8 @@ Future<void> main() async {
   // 라우터가 알 수 없는 해시 경로를 `/`로 정리하기 전에 읽어둬야 한다.
   final oauthError = _readOAuthErrorParams();
   registerCameraView();
+  // push로 연 화면(학습/연습/로그인)도 URL에 반영해야 새로고침·링크 공유 시 같은 화면이 열린다.
+  GoRouter.optionURLReflectsImperativeAPIs = true;
   await Supabase.initialize(url: SupabaseConfig.url, publishableKey: SupabaseConfig.publishableKey);
   runApp(ProviderScope(child: SueoriApp(oauthError: oauthError)));
 }
@@ -57,6 +60,10 @@ class _SueoriAppState extends ConsumerState<SueoriApp> {
     final hash = web.window.location.hash;
     final cleanHash = hash.startsWith('#/') ? hash.split('?').first : '#/';
     web.window.history.replaceState(null, '', '${Uri.base.path}$cleanHash');
+    // `#/mypage?error=...`는 라우터가 쿼리째 경로로 들고 있어 다음 프레임에 URL을 되돌리므로 라우터도 옮긴다.
+    if (hash.startsWith('#/') && hash.contains('?')) {
+      ref.read(appRouterProvider).go(cleanHash.substring(1));
+    }
 
     final alreadyLinked = params['error_code'] == 'identity_already_exists';
     final message = alreadyLinked
