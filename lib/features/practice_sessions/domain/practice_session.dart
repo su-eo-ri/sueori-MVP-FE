@@ -5,7 +5,7 @@
 /// ```json
 /// {
 ///   "version": 1,
-///   "algorithm": "cosine" | "dtw",
+///   "algorithm": "distance" | "dtw",
 ///   "referenceFrameIndex": 0,
 ///   "userTimestampMs": 0,
 ///   "handedness": "left" | "right",
