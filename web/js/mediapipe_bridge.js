@@ -148,6 +148,10 @@ function loop() {
 async function start(videoId, canvasId) {
   video = document.getElementById(videoId);
   canvas = document.getElementById(canvasId);
+  if (!video || !canvas) {
+    state.error = "카메라 미리보기 요소를 찾지 못함 (" + videoId + ", " + canvasId + ")";
+    return;
+  }
   ctx = canvas.getContext("2d");
 
   await ensureLandmarker();
