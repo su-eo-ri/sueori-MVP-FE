@@ -49,3 +49,7 @@ app.*.map.json
 
 # Cloudflare Wrangler
 .wrangler/
+
+# path 패키지 테스트 생성물
+packages/*/build/
+packages/*/pubspec.lock

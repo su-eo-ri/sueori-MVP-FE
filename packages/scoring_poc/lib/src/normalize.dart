@@ -6,7 +6,10 @@ import 'point3.dart';
 ///
 /// 정규화 방식:
 ///  - 손목(0번)을 원점으로 평행이동 → 화면상 손의 위치(어디서 채점하든)와 무관해짐
-///  - 손목~중지 MCP(9번) 거리로 스케일 정규화 → 카메라와의 거리(손 크기)와 무관해짐
+///  - 손바닥 5점(손목 0, MCP 5·9·13·17) 사이 거리 중 최댓값으로 스케일 정규화 →
+///    카메라와의 거리(손 크기)와 무관해짐. 손목~MCP9 한 구간만 쓰면 손을 돌릴 때
+///    그 거리가 40~50%까지 줄어 전체 좌표가 부풀려지므로(가족 단어 기준 데이터에서
+///    확인), 회전에 덜 민감한 여러 쌍의 최댓값을 쓴다.
 ///
 /// 의도적으로 정규화하지 "않는" 것: 회전(손 방향/손바닥이 향하는 방향).
 /// 수어에서는 손바닥이 향하는 방향 자체가 의미를 구분하는 요소인 경우가 많아
@@ -19,6 +22,8 @@ import 'point3.dart';
 /// 자체가 의미를 구성하는 경우가 있어, 실제 데이터로 채점 정확도를 검증할 때
 /// 이 부분이 부족하면 "손목의 정규화 전 좌표 변화량"을 별도 피처로 추가하는
 /// 방안을 검토해야 한다.
+const _palm = [0, 5, 9, 13, 17];
+
 List<double> normalizeAndFlatten(List<Point3> landmarks) {
   assert(
     landmarks.length == 21,
@@ -26,11 +31,17 @@ List<double> normalizeAndFlatten(List<Point3> landmarks) {
   );
 
   final wrist = landmarks[0];
-  final scaleRef = landmarks[9];
-  final dx = scaleRef.x - wrist.x;
-  final dy = scaleRef.y - wrist.y;
-  final dz = scaleRef.z - wrist.z;
-  final scale = math.sqrt(dx * dx + dy * dy + dz * dz);
+  var scale = 0.0;
+  for (var i = 0; i < _palm.length; i++) {
+    for (var j = i + 1; j < _palm.length; j++) {
+      final a = landmarks[_palm[i]];
+      final b = landmarks[_palm[j]];
+      final dx = a.x - b.x;
+      final dy = a.y - b.y;
+      final dz = a.z - b.z;
+      scale = math.max(scale, math.sqrt(dx * dx + dy * dy + dz * dz));
+    }
+  }
   final safeScale = scale < 1e-9 ? 1.0 : scale;
 
   final out = List<double>.filled(landmarks.length * 3, 0);
