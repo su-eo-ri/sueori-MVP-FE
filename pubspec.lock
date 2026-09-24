@@ -536,7 +536,7 @@ packages:
   scoring_poc:
     dependency: "direct main"
     description:
-      path: "../poc/scoring_poc"
+      path: "packages/scoring_poc"
       relative: true
     source: path
     version: "0.0.1"
