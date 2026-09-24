@@ -1,122 +1,93 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:web/web.dart' as web;
 
-void main() {
-  runApp(const MyApp());
+import 'core/config/supabase_config.dart';
+import 'core/router/app_router.dart';
+import 'core/theme/app_colors.dart';
+import 'features/auth/presentation/providers/auth_providers.dart';
+import 'features/camera/presentation/camera_view.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // 라우터가 알 수 없는 해시 경로를 `/`로 정리하기 전에 읽어둬야 한다.
+  final oauthError = _readOAuthErrorParams();
+  registerCameraView();
+  await Supabase.initialize(url: SupabaseConfig.url, publishableKey: SupabaseConfig.publishableKey);
+  runApp(ProviderScope(child: SueoriApp(oauthError: oauthError)));
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+/// OAuth 실패 시 Supabase는 에러를 쿼리(`?error_code=`)나 해시(`#error_code=`,
+/// `#/mypage?error_code=`)로 붙여 돌려보낸다 — 해시 라우팅이라 go_router는 못 보므로 직접 읽는다.
+Map<String, String>? _readOAuthErrorParams() {
+  final params = {...Uri.base.queryParameters};
+  final fragment = Uri.base.fragment;
+  final q = fragment.indexOf('?');
+  final fragmentQuery = q >= 0 ? fragment.substring(q + 1) : (fragment.startsWith('/') ? '' : fragment);
+  if (fragmentQuery.isNotEmpty) params.addAll(Uri.splitQueryString(fragmentQuery));
+  return params.containsKey('error_code') || params.containsKey('error') ? params : null;
+}
 
-  // This widget is the root of your application.
+class SueoriApp extends ConsumerStatefulWidget {
+  const SueoriApp({super.key, this.oauthError});
+
+  final Map<String, String>? oauthError;
+
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+  ConsumerState<SueoriApp> createState() => _SueoriAppState();
+}
+
+class _SueoriAppState extends ConsumerState<SueoriApp> {
+  final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
+  @override
+  void initState() {
+    super.initState();
+    // PRD 정책: 로그인 화면 없이 앱 시작 시 익명 세션부터 확보.
+    Future.microtask(() => ref.read(authRepositoryProvider).ensureSignedIn());
+    if (widget.oauthError != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _showOAuthError(widget.oauthError!));
+    }
+  }
+
+  void _showOAuthError(Map<String, String> params) {
+    // 새로고침할 때마다 같은 스낵바가 다시 뜨지 않도록 URL에서 에러 쿼리를 지운다.
+    final hash = web.window.location.hash;
+    final cleanHash = hash.startsWith('#/') ? hash.split('?').first : '#/';
+    web.window.history.replaceState(null, '', '${Uri.base.path}$cleanHash');
+
+    final alreadyLinked = params['error_code'] == 'identity_already_exists';
+    final message = alreadyLinked
+        ? '이 Google 계정은 이미 다른 프로필에 연결되어 있어요. 기존 계정으로 로그인하면 이 기기의 게스트 기록은 사라져요.'
+        : params['error_description'] ?? '로그인 중 문제가 발생했어요. 다시 시도해주세요.';
+    _scaffoldMessengerKey.currentState?.showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 10),
+        action: alreadyLinked
+            ? SnackBarAction(
+                label: '기존 계정으로 로그인',
+                onPressed: () => ref.read(authRepositoryProvider).signInWithGoogle(),
+              )
+            : null,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
     );
   }
-}
-
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+    final router = ref.watch(appRouterProvider);
+    return MaterialApp.router(
+      title: '수어리',
+      scaffoldMessengerKey: _scaffoldMessengerKey,
+      theme: ThemeData(
+        colorSchemeSeed: AppColors.brandPrimary,
+        useMaterial3: true,
+        textTheme: GoogleFonts.notoSansKrTextTheme(),
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ),
+      routerConfig: router,
     );
   }
 }
