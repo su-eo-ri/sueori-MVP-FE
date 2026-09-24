@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/widgets/breakpoints.dart';
 import '../../../categories/domain/category.dart';
 import '../../../categories/domain/word.dart';
 import '../../../categories/presentation/providers/category_providers.dart';
@@ -115,54 +116,107 @@ class _ResultContent extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Text('${session.score}점', style: AppTextStyles.h2.copyWith(fontSize: 32)),
-          const SizedBox(height: 8),
-          _PassBadge(passed: passed),
-          const SizedBox(height: 20),
-          // ponytail: 실제 스켈레톤-실루엣 랜드마크 비교 오버레이는 landmark→SVG 렌더러가
-          // 필요해 범위 밖. 대신 플레이스홀더 박스 + weakestLandmarks 인덱스 캡션만 표시.
-          _ComparisonPlaceholder(weakestLandmarks: session.weakestLandmarks),
-          const SizedBox(height: 20),
-          if (word != null) Text(word!.term, style: AppTextStyles.h3),
-          const SizedBox(height: 8),
-          Text(
-            passed ? '정확하게 잘 표현했어요!' : '조금 더 연습해봐요.',
-            style: AppTextStyles.bodySmall,
-          ),
-          const SizedBox(height: 24),
-          Row(
+    final isWide = Breakpoints.isWide(context);
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: Breakpoints.contentMaxWidth),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: isWide ? _buildWide(context) : _buildMobile(context),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobile(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text('${session.score}점', style: AppTextStyles.display(context)),
+        const SizedBox(height: 8),
+        _PassBadge(passed: passed),
+        const SizedBox(height: 20),
+        // ponytail: 실제 스켈레톤-실루엣 랜드마크 비교 오버레이는 landmark→SVG 렌더러가
+        // 필요해 범위 밖. 대신 플레이스홀더 박스 + weakestLandmarks 인덱스 캡션만 표시.
+        _ComparisonPlaceholder(weakestLandmarks: session.weakestLandmarks, height: 200),
+        const SizedBox(height: 20),
+        if (word != null) Text(word!.term, style: AppTextStyles.h3),
+        const SizedBox(height: 8),
+        Text(
+          passed ? '정확하게 잘 표현했어요!' : '조금 더 연습해봐요.',
+          style: AppTextStyles.bodyLarge(context),
+        ),
+        const SizedBox(height: 24),
+        _CtaButtons(session: session),
+      ],
+    );
+  }
+
+  /// 와이드(≥768): 좌측 비교 플레이스홀더 / 우측 점수+배지+피드백+CTA 2컬럼.
+  Widget _buildWide(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: _ComparisonPlaceholder(weakestLandmarks: session.weakestLandmarks, height: 420),
+        ),
+        const SizedBox(width: 48),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => context.push('/practice/${session.wordId}'),
-                  child: const Text('다시 도전'),
-                ),
+              Text('${session.score}점', style: AppTextStyles.display(context)),
+              const SizedBox(height: 12),
+              _PassBadge(passed: passed),
+              const SizedBox(height: 24),
+              if (word != null) Text(word!.term, style: AppTextStyles.h3),
+              const SizedBox(height: 8),
+              Text(
+                passed ? '정확하게 잘 표현했어요!' : '조금 더 연습해봐요.',
+                style: AppTextStyles.bodyLarge(context),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: FilledButton(
-                  style: FilledButton.styleFrom(backgroundColor: AppColors.brandPrimary),
-                  onPressed: () async {
-                    final messenger = ScaffoldMessenger.of(context);
-                    try {
-                      await ref.read(favoriteRepositoryProvider).addManual(session.wordId);
-                      messenger.showSnackBar(const SnackBar(content: Text('즐겨찾기에 추가했어요')));
-                    } catch (e) {
-                      messenger.showSnackBar(SnackBar(content: Text('즐겨찾기 추가에 실패했어요: $e')));
-                    }
-                  },
-                  child: const Text('즐겨찾기 추가'),
-                ),
-              ),
+              const SizedBox(height: 32),
+              _CtaButtons(session: session),
             ],
           ),
-        ],
-      ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CtaButtons extends ConsumerWidget {
+  const _CtaButtons({required this.session});
+
+  final PracticeSession session;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton(
+            onPressed: () => context.push('/practice/${session.wordId}'),
+            child: const Text('다시 도전'),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.brandPrimary),
+            onPressed: () async {
+              final messenger = ScaffoldMessenger.of(context);
+              try {
+                await ref.read(favoriteRepositoryProvider).addManual(session.wordId);
+                messenger.showSnackBar(const SnackBar(content: Text('즐겨찾기에 추가했어요')));
+              } catch (e) {
+                messenger.showSnackBar(SnackBar(content: Text('즐겨찾기 추가에 실패했어요: $e')));
+              }
+            },
+            child: const Text('즐겨찾기 추가'),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -189,9 +243,10 @@ class _PassBadge extends StatelessWidget {
 }
 
 class _ComparisonPlaceholder extends StatelessWidget {
-  const _ComparisonPlaceholder({required this.weakestLandmarks});
+  const _ComparisonPlaceholder({required this.weakestLandmarks, required this.height});
 
   final List<int> weakestLandmarks;
+  final double height;
 
   @override
   Widget build(BuildContext context) {
@@ -199,7 +254,7 @@ class _ComparisonPlaceholder extends StatelessWidget {
       children: [
         Container(
           width: double.infinity,
-          height: 200,
+          height: height,
           decoration: BoxDecoration(
             color: AppColors.bgSecondary,
             borderRadius: BorderRadius.circular(12),
