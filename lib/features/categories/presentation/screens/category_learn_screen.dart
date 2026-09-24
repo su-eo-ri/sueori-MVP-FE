@@ -321,6 +321,8 @@ class _Thumbnail extends StatelessWidget {
     return Image.network(
       url!,
       fit: BoxFit.cover,
+      // 국립국어원 이미지 서버가 CORS 헤더를 안 줘서 <img> 요소로 대체 표시
+      webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
       errorBuilder: (context, error, stackTrace) => Container(
         color: AppColors.bgSecondary,
         child: const Icon(Icons.image_not_supported_outlined, color: AppColors.textSecondary),

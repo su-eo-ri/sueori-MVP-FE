@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:scoring_poc/scoring_poc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:web/web.dart' as web;
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
@@ -44,6 +45,9 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
   Timer? _handPollTimer;
   int _missedHandPolls = 0;
   bool _cameraEverStarted = false;
+  bool _starting = false;
+  // 상태가 바뀌어도 같은 <video>가 유지돼야 스트림이 끊기지 않는다.
+  final _previewKey = GlobalKey();
   bool _scoring = false;
   String? _scoreStatus;
   String? _scoreError;
@@ -58,9 +62,18 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
   /// "카메라 허용하기"/"다시 시도" 탭에서만 호출 — 화면 진입 시 자동 호출 금지
   /// (브라우저 네이티브 권한 프롬프트가 사용자 의도 없이 뜨지 않게 하기 위함).
   Future<void> _requestCamera() async {
+    if (_starting) return;
     _cameraEverStarted = true;
     _handPollTimer?.cancel();
 
+    // JS start()가 id로 <video>/<canvas>를 찾으므로 미리보기를 먼저 DOM에 올린다.
+    // _starting은 최종 상태가 정해질 때 같이 끈다. 중간에 끄면 미리보기가 빠졌다가
+    // 새로 만들어져서 스트림이 붙은 <video>가 DOM에서 사라진다.
+    setState(() => _starting = true);
+    for (var i = 0; i < 30 && web.document.getElementById(cameraCanvasElementId) == null; i++) {
+      await Future.delayed(const Duration(milliseconds: 100));
+      if (!mounted) return;
+    }
     // start()는 실패해도 던지지 않고 getStats()의 error 필드에 기록만 함.
     await _bridge.start(videoElementId: cameraVideoElementId, canvasElementId: cameraCanvasElementId);
 
@@ -84,21 +97,30 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
     }
     // 3초 넘도록 running도 error도 안 채워지면(모델 로드가 유난히 느린 경우
     // 등) 일반 실패로 취급.
-    setState(() => _state = _PracticeUiState.recognitionFailed);
+    setState(() {
+      _starting = false;
+      _state = _PracticeUiState.recognitionFailed;
+    });
   }
 
   void _resolveError(String error) {
-    if (error.contains('NotAllowedError')) {
-      setState(() => _state = _PracticeUiState.permissionDenied);
-    } else if (error.contains('NotFoundError')) {
-      setState(() => _state = _PracticeUiState.noCamera);
-    } else {
-      setState(() => _state = _PracticeUiState.recognitionFailed);
-    }
+    setState(() {
+      _starting = false;
+      if (error.contains('NotAllowedError')) {
+        _state = _PracticeUiState.permissionDenied;
+      } else if (error.contains('NotFoundError')) {
+        _state = _PracticeUiState.noCamera;
+      } else {
+        _state = _PracticeUiState.recognitionFailed;
+      }
+    });
   }
 
   void _enterActiveState() {
-    setState(() => _state = _PracticeUiState.active);
+    setState(() {
+      _starting = false;
+      _state = _PracticeUiState.active;
+    });
     _missedHandPolls = 0;
     _handPollTimer?.cancel();
     _handPollTimer = Timer.periodic(const Duration(milliseconds: 500), (_) => _pollHand());
@@ -284,6 +306,10 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
   /// 아니므로 여기서 쓰지 않음 — 자체 `AppBar`만 유지.
   Widget _buildWideBody(List<Point3>? ghostLandmarks) {
     final (Widget visual, Widget panel) = switch (_state) {
+      _ when _starting => (
+        _cameraPreviewBox(overlay: const CircularProgressIndicator(color: Colors.white)),
+        const _GuidancePanel(title: '카메라를 준비하고 있어요', body: '처음에는 손 인식 모델을 불러오느라 몇 초 걸릴 수 있어요.'),
+      ),
       _PracticeUiState.permissionPrompt => (
         _visualPlaceholder(Icons.videocam_outlined, AppColors.brandPrimary),
         _GuidancePanel(
@@ -377,6 +403,16 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
   }
 
   Widget _buildBody(List<Point3>? ghostLandmarks) {
+    if (_starting) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _cameraPreviewBox(overlay: const CircularProgressIndicator(color: Colors.white)),
+          const SizedBox(height: 16),
+          Text('카메라를 준비하고 있어요', style: AppTextStyles.h3),
+        ],
+      );
+    }
     switch (_state) {
       case _PracticeUiState.permissionPrompt:
         return _MessageView(
@@ -477,9 +513,8 @@ class _PracticeScreenState extends ConsumerState<PracticeScreen> {
         final preview = SizedBox(
           width: width,
           height: height,
-          child: const FittedBox(fit: BoxFit.contain, child: CameraPreview()),
+          child: FittedBox(fit: BoxFit.contain, child: CameraPreview(key: _previewKey)),
         );
-        if (ghostLandmarks == null && overlay == null) return preview;
         return Stack(
           alignment: Alignment.center,
           children: [
